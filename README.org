@@ -1,0 +1,52 @@
+#+title: Readme
+* Requirements Analysis
+Requirements are put up here on Thornton's website: https://ics.uci.edu/~thornton/ics33/ProjectGuide/Project1/
+
+We are making a simulation of different devices. A peer-to-peer cascade network of sort. Device will propagate to as many devices it could reach to send an alert/message. Then the other devices are going to propagate a message to other devices that it could reach. The original device can cancel the alert message. The cancellation notice will travel between devices. Devices propagate alert and cancellation notice if such notices are new; if the newnews of notices are not respected then alerts will initiate a forever loop. They should not propagate an alert if that alert is already cancelled. The passage of time is simulated. The program should skip to the latest simulation time input into the command line interface.
+* Implementation
+Project requirements state that the implementation must be modularized. Here's what I think I could do:
+
+1. cli.py to read from the command line and template print statements to the standard output.
+2. simulation.py - implementing Device class and Alert class
+3. project1.py where everything is pulled together - use list to save devices; pull cli and simulation.py together
+** simulation.py
+#+BEGIN_SRC mermaid :file uml-diagrams/simulation-uml.png
+classDiagram
+class Device {
+    -List~Alert~ alerts
+    -Integer id
+    +Device(id: Integer) Device
+    +get_id() Integer
+    +send_alert(message: String, time: Integer, device: Device)
+}
+class Alert {
+    -String message
+    -Integer time
+    -Boolean cancelled
+    +get_message() String
+    +get_time() Integer
+    +cancel() Boolean
+}
+Device *-- Alert
+#+END_SRC
+
+#+RESULTS:
+[[file:uml-diagrams/simulation-uml.png]]
+Note: Alert.cancel() should return a Boolean of whether the alert was cancelled. This return can be used to decide if cancelling propagation should proceed.
+
+Alert.time is a private attribute which states the time the Alert's state was changed (created or cancelled).
+
+Each Alert is duplicative and unique to each Device. Devices do not pass the same alert object to each other since that is not a simulation.
+** cli.py
+This should be your standard class-less module. There should be an interpreter function that returns the command the other arguments as tuple so that project0.py can interpret.
+
+There should also be multiple log functions for different purpose: log_alert_sent(), log_alert_recieved(). As well as log_alert_cancellation_sent() and log_alert_cancellation_received(). In this sense, I believe I should make a Logger class.
+#+BEGIN_SRC mermaid :file uml-diagrams/logger-uml.png
+classDiagram
+class Logger {
+    -Integer helloWorld
+}
+#+END_SRC
+
+#+RESULTS:
+[[file:uml-diagrams/logger-uml.png]]
