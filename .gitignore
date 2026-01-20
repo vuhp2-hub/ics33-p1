@@ -7,3 +7,6 @@ __pycache__
 /venv
 *.coverage
 .DS_Store
+flake.lock
+.envrc
+.direnv
