@@ -22,10 +22,13 @@ class Device {
 class Alert {
     -String message
     -Integer time
+    -List~Device~ recipients
     -Boolean cancelled
     +get_message() String
     +get_time() Integer
     +cancel() Boolean
+    +add_recipient(device: Device)
+    +is_cancelled(self, device: Device) Boolean
 }
 Device *-- Alert
 #+END_SRC
