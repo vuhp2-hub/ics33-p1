@@ -57,5 +57,5 @@ class TestDevice(unittest.TestCase):
         self.assertTrue(device2._alerts)
         self.assertEqual(device2._alerts[0].get_time(), 1000)
         device2.propagate(device3, 2000)
-        self.assertEqual(device3._alerts[0].get_time(), 2000)
+        self.assertEqual(device3._alerts[0].get_time(), 3000)
         self.assertEqual(device3._alerts[0].get_description(), "Hello")

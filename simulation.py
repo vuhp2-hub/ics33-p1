@@ -37,11 +37,12 @@ class Device:
         # Cancellation arrives early? --> Sets up blank alert
         alert = self.alert(description, time_cancelled)
         alert.cancel(time_cancelled)
-    def propagate(self, receiver: Device, time_received: int):
+    def propagate(self, receiver: Device, time_delay: int):
         '''Propagates alerts'''
         assert receiver, "No Device receiver as argument"
         for alert in self._alerts:
             alert_message = alert.get_description()
+            time_received = alert.get_time() + time_delay
             if alert.is_cancelled():
                 receiver.cancel_alert(alert_message, time_received)
             else:
