@@ -13,7 +13,7 @@ class Device:
         return self._id
     def alert(self, description: str, time_began: int) -> Alert:
         '''Creates a new alert given name and time begun'''
-        assert description and time_began, "Missing arguments"
+        assert description and type(time_began) == int, "Missing arguments"
         # Make Alerts (Or Blank alert due to cancellation) conflict and do nothing
         for existing_alert in self._alerts:
             if existing_alert.get_description() == description:
@@ -26,7 +26,7 @@ class Device:
         '''Cancels alert of the description
         time_cancelled is the time the device is supposed to receive the cancellation
         '''
-        assert description and time_cancelled, "Missing arguments"
+        assert description and type(time_cancelled) == int, "Missing arguments"
         alert_exists = False
         for alert in self._alerts:
             if alert.get_description() != description: continue

@@ -47,3 +47,15 @@ class TestDevice(unittest.TestCase):
         device.cancel_alert("Hello", 2000)
         self.assertTrue(device._alerts[0].is_cancelled())
         self.assertEqual(device._alerts[0].get_time(), 2000)
+    def test_device_propagation(self):
+        device1 = self._devices[0]
+        device2 = self._devices[1]
+        device3 = self._devices[2]
+
+        device1.alert("Hello", 0)
+        device1.propagate(device2, 1000)
+        self.assertTrue(device2._alerts)
+        self.assertEqual(device2._alerts[0].get_time(), 1000)
+        device2.propagate(device3, 2000)
+        self.assertEqual(device3._alerts[0].get_time(), 2000)
+        self.assertEqual(device3._alerts[0].get_description(), "Hello")
