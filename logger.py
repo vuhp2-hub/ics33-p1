@@ -13,8 +13,8 @@ class Logger:
         if not str(time) in self._time_log:
             self._sorted_time_keys.append(time)
             self._sorted_time_keys.sort()
-            self._time_log[time] = []
-        self._time_log[time].append(f'#{recipient} RECEIVED {alert_type} FROM #{sender}: {description}')
+            self._time_log[str(time)] = []
+        self._time_log[str(time)].append(f'#{recipient} RECEIVED {alert_type} FROM #{sender}: {description}')
 
     def log_sent(self, time: int, alert_type: str, sender: int, recipient: int, description: str):
         '''Logs sent'''
@@ -23,13 +23,14 @@ class Logger:
         if not str(time) in self._time_log:
             self._sorted_time_keys.append(time)
             self._sorted_time_keys.sort()
-            self._time_log[time] = []
-        self._time_log[time].append(f'#{sender} SENT {alert_type} TO #{recipient}: {description}')       
+            self._time_log[str(time)] = []
+        self._time_log[str(time)].append(f'#{sender} SENT {alert_type} TO #{recipient}: {description}')       
 
     def organize_log(self) -> str:
         '''Organize log and return it'''
         result = ''
         for time_key in self._sorted_time_keys:
+            time_key = str(time_key)
             assert time_key in self._time_log
             for time_log in self._time_log[time_key]:
                 result += f'@{time_key}: {time_log}\n'

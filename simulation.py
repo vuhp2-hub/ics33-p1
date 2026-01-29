@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
 import logger
+from pathlib import Path
 
 class Device:
     '''Device class with id and list of alerts'''
     _id_count = 0
-    def __init__(self):
+    def __init__(self, logger: logger.Logger | None=None):
         '''Construct Device object. Id increment from class attribute'''
         self._alerts = []
         Device._id_count += 1
         self._id = Device._id_count
         self._prop_rules = []
         self._cancellation_times = {}
+        self._logger = logger
     def add_prop_rule(self, receiver: Device, delay: int):
         '''Add popragation given device and delay'''
         assert receiver and type(delay) == int, "add_prop_rule: missing arguments device and delay"
@@ -67,12 +69,25 @@ class Device:
                 receiver._cancellation_times[alert_desc] = self._cancellation_times[alert_desc]
                 if self._cancellation_times[alert_desc] < time_received:
                     if not alert.is_cancelled():
+                        if self._logger:
+                            self._logger.log_sent(time_began, 'CANCELLATION', self.get_id(), receiver.get_id(), alert_desc)
+                            self._logger.log_received(time_received, 'CANCELLATION', receiver.get_id(), self.get_id(), alert_desc)
                         self._cancel_alert(alert_desc, time_received)
                     else:
+                        if self._logger:
+                            self._logger.log_sent(time_began, 'CANCELLATION', self.get_id(), receiver.get_id(), alert_desc)
+                            self._logger.log_received(time_received, 'CANCELLATION', receiver.get_id(), self.get_id(), alert_desc)
                         receiver._cancel_alert(alert_desc, time_received)
                 else:
+                    # UGLY CODE: no time to fix :(
+                    if self._logger:
+                        self._logger.log_sent(time_began, 'ALERT', self.get_id(), receiver.get_id(), alert_desc)
+                        self._logger.log_received(time_received, 'ALERT', receiver.get_id(), self.get_id(), alert_desc)
                     receiver.alert(alert_desc, time_received)
             else:
+                if self._logger:
+                    self._logger.log_sent(time_began, 'ALERT', self.get_id(), receiver.get_id(), alert_desc)
+                    self._logger.log_received(time_received, 'ALERT', receiver.get_id(), self.get_id(), alert_desc)
                 receiver.alert(alert_desc, time_received)
     def set_cancellation_time(self, description: str, time: int):
         self._cancellation_times[description] = time
@@ -113,5 +128,29 @@ class Alert:
         self._time = time
 
 class Simulation:
-    def __init__(self, length: int):
+    def __init__(self):
+        self._logger = None
+        self._devices = {}
+        self._initial_alerts_queue = []
+    def set_length(self, length):
+        '''Initializes logger'''
         self._logger = logger.Logger(length)
+    def add_device(self, device_id: str):
+        '''Add devices to simulation list'''
+        assert self._logger
+        self._devices[device_id] = Device(self._logger)
+    def add_propagation(self, propagator_id: str, propagatee_id: str, delay: str):
+        '''Add propagation rule'''
+        self._devices[propagator_id].add_prop_rule(self._devices[propagatee_id], int(delay))
+    def add_alert(self, device_id: str, message: str, time_begin: str):
+        '''Add Alert to queue to be run'''
+        self._initial_alerts_queue.append((device_id, message, time_begin))
+    def add_cancellation_time(self, device_id: str, message: str, time_begin: str):
+        '''Add cancellation times'''
+        self._devices[device_id].set_cancellation_time(message, int(time_begin))
+    def run(self):
+        '''Runs the simulation'''
+        assert self._devices and self._logger and self._initial_alerts_queue
+        for alert in self._initial_alerts_queue:
+            self._devices[alert[0]].alert(alert[1], int(alert[2]))
+        print(self._logger.organize_log())

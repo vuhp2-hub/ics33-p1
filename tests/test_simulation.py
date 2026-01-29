@@ -68,7 +68,8 @@ class TestDevice(unittest.TestCase):
 
 class TestSimulation(unittest.TestCase):
     def setUp(self):
-        self._simulation = Simulation(100000)
+        self._simulation = Simulation()
+        self._simulation.set_length(100000)
 
     def test_simulation_logger_init(self):
         self.assertTrue(self._simulation._logger)
