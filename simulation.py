@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import logger
+
 class Device:
     '''Device class with id and list of alerts'''
     _id_count = 0
@@ -53,8 +55,7 @@ class Device:
         self._alerts.append(alert)
         self.propagate(alert, time_cancelled)
     def propagate(self, alert: Alert, time_began: int):
-        '''Propagates alert if not ceased'''
-        if alert.is_propagation_ceased(): return
+        '''Propagates'''
 
         alert_desc = alert.get_description()
 
@@ -73,9 +74,6 @@ class Device:
                     receiver.alert(alert_desc, time_received)
             else:
                 receiver.alert(alert_desc, time_received)
-
-        if alert.is_cancelled():
-            alert.set_propagation_ceased()
     def set_cancellation_time(self, description: str, time: int):
         self._cancellation_times[description] = time
 class Alert:
@@ -94,7 +92,6 @@ class Alert:
         self._description = description
         self._time = time
         self._cancelled = False
-        self._propagation_ceased = False
     def get_description(self) -> str:
         '''Returns the alert's description'''
         return self._description
@@ -114,7 +111,7 @@ class Alert:
         return self._cancelled
     def change_time(self, time: int):
         self._time = time
-    def set_propagation_ceased(self):
-        self._propagation_ceased = True
-    def is_propagation_ceased(self):
-        return self._propagation_ceased
+
+class Simulation:
+    def __init__(self, length: int):
+        self._logger = logger.Logger(length)
