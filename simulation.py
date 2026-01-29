@@ -32,12 +32,12 @@ class Device:
                 existing_alert = alert
         if not existing_alert:
             existing_alert = Alert(description, time_began)
+            self._alerts.append(existing_alert)
             if not no_propagate:
-                self._alerts.append(existing_alert)
-        if not no_propagate:
-            self.propagate(existing_alert, time_began)
+                self.propagate(existing_alert, time_began)
+
         return existing_alert
-    def _cancel_alert(self, description: str, time_cancelled: int):
+    def cancel_alert(self, description: str, time_cancelled: int):
         '''
         Cancels alert of the description.
         time_cancelled is the time the device is supposed to receive the cancellation
@@ -46,51 +46,34 @@ class Device:
         for i in range(len(self._alerts)):
             alert = self._alerts[i]
             if alert.get_description() != description: continue
-            assert alert.get_time() < time_cancelled
-            if alert.is_cancelled(): return
+            if alert.is_propagation_ceased():
+                return
             alert.cancel(time_cancelled)
             self.propagate(alert, time_cancelled)
-            return
-        # assume alert has not have time to be created
-        alert = self.alert(description, time_cancelled, no_propagate=True)
-        alert.cancel(time_cancelled)
-        self._alerts.append(alert)
-        self.propagate(alert, time_cancelled)
     def propagate(self, alert: Alert, time_began: int):
         '''Propagates'''
 
+        if alert.is_propagation_ceased(): return
+
         alert_desc = alert.get_description()
+        if alert.is_cancelled():
+            alert.set_propagation_ceased()
 
         for prop_rule in self._prop_rules:
             receiver = prop_rule[0]
             delay = prop_rule[1]
             time_received = time_began + delay
-            if alert_desc in self._cancellation_times:
-                receiver._cancellation_times[alert_desc] = self._cancellation_times[alert_desc]
-                if self._cancellation_times[alert_desc] < time_received:
-                    if not alert.is_cancelled():
-                        if self._logger:
-                            self._logger.log_sent(time_began, 'CANCELLATION', self.get_id(), receiver.get_id(), alert_desc)
-                            self._logger.log_received(time_received, 'CANCELLATION', receiver.get_id(), self.get_id(), alert_desc)
-                        self._cancel_alert(alert_desc, time_received)
-                    else:
-                        if self._logger:
-                            self._logger.log_sent(time_began, 'CANCELLATION', self.get_id(), receiver.get_id(), alert_desc)
-                            self._logger.log_received(time_received, 'CANCELLATION', receiver.get_id(), self.get_id(), alert_desc)
-                        receiver._cancel_alert(alert_desc, time_received)
-                else:
-                    # UGLY CODE: no time to fix :(
-                    if self._logger:
-                        self._logger.log_sent(time_began, 'ALERT', self.get_id(), receiver.get_id(), alert_desc)
-                        self._logger.log_received(time_received, 'ALERT', receiver.get_id(), self.get_id(), alert_desc)
-                    receiver.alert(alert_desc, time_received)
+
+            if alert.is_cancelled():
+                if self._logger:
+                    self._logger.log_sent(time_began, "CANCELLATION", self.get_id(), receiver.get_id(), alert_desc)
+                    self._logger.log_received(time_received, "CANCELLATION", receiver.get_id(), self.get_id(), alert_desc)
+                receiver.cancel_alert(alert_desc, time_received)
             else:
                 if self._logger:
-                    self._logger.log_sent(time_began, 'ALERT', self.get_id(), receiver.get_id(), alert_desc)
-                    self._logger.log_received(time_received, 'ALERT', receiver.get_id(), self.get_id(), alert_desc)
+                    self._logger.log_sent(time_began, "ALERT", self.get_id(), receiver.get_id(), alert_desc)
+                    self._logger.log_received(time_received, "ALERT", receiver.get_id(), self.get_id(), alert_desc)                   
                 receiver.alert(alert_desc, time_received)
-    def set_cancellation_time(self, description: str, time: int):
-        self._cancellation_times[description] = time
 class Alert:
     '''
     Alert class.
@@ -107,6 +90,7 @@ class Alert:
         self._description = description
         self._time = time
         self._cancelled = False
+        self._propagation_ceased = False
     def get_description(self) -> str:
         '''Returns the alert's description'''
         return self._description
@@ -126,12 +110,17 @@ class Alert:
         return self._cancelled
     def change_time(self, time: int):
         self._time = time
+    def set_propagation_ceased(self):
+        self._propagation_ceased = True
+    def is_propagation_ceased(self):
+        return self._propagation_ceased
 
 class Simulation:
     def __init__(self):
         self._logger = None
         self._devices = {}
         self._initial_alerts_queue = []
+        self._initial_cancellations_queue = []
     def set_length(self, length):
         '''Initializes logger'''
         self._logger = logger.Logger(length)
@@ -147,10 +136,12 @@ class Simulation:
         self._initial_alerts_queue.append((device_id, message, time_begin))
     def add_cancellation_time(self, device_id: str, message: str, time_begin: str):
         '''Add cancellation times'''
-        self._devices[device_id].set_cancellation_time(message, int(time_begin))
+        self._initial_cancellations_queue.append((device_id, message, time_begin))
     def run(self):
         '''Runs the simulation'''
         assert self._devices and self._logger and self._initial_alerts_queue
         for alert in self._initial_alerts_queue:
             self._devices[alert[0]].alert(alert[1], int(alert[2]))
+        for alert in self._initial_cancellations_queue:
+            self._devices[alert[0]].cancel_alert(alert[1], int(alert[2]))
         print(self._logger.organize_log())

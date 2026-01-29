@@ -59,8 +59,8 @@ class TestDevice(unittest.TestCase):
         device2.add_prop_rule(device3, 2000)       
         device3.add_prop_rule(device1, 1000)
 
-        device1.set_cancellation_time("Hello", 1000)
         device1.alert("Hello", 0)
+        device1.cancel_alert("Hello", 1000)
 
         self.assertTrue(device3._alerts[0].is_cancelled())
         self.assertTrue(device1._alerts[0].is_cancelled())

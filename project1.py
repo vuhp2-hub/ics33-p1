@@ -34,7 +34,5 @@ def main() -> None:
                 my_simulation.add_cancellation_time(words[1], words[2], words[3])
 
     my_simulation.run()
-
-
 if __name__ == '__main__':
     main()
