@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import unittest
-from simulation import Device, Alert
+from simulation import Device, Alert, Simulation
 
 class TestAlert(unittest.TestCase):
     def setUp(self):
@@ -65,3 +65,10 @@ class TestDevice(unittest.TestCase):
         self.assertTrue(device3._alerts[0].is_cancelled())
         self.assertTrue(device1._alerts[0].is_cancelled())
         self.assertTrue(device2._alerts[0].is_cancelled())
+
+class TestSimulation(unittest.TestCase):
+    def setUp(self):
+        self._simulation = Simulation(100000)
+
+    def test_simulation_logger_init(self):
+        self.assertTrue(self._simulation._logger)
