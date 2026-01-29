@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 
 import logger
-from pathlib import Path
 
 class Device:
     '''Device class with id and list of alerts'''
     _id_count = 0
-    def __init__(self, logger: logger.Logger | None=None):
+    def __init__(self):
         '''Construct Device object. Id increment from class attribute'''
-        self._alerts = []
         Device._id_count += 1
         self._id = Device._id_count
         self._prop_rules = []
-        self._cancellation_times = {}
-        self._logger = logger
+        self._seen_cancels = set()
     def add_prop_rule(self, receiver: Device, delay: int):
         '''Add popragation given device and delay'''
         assert receiver and type(delay) == int, "add_prop_rule: missing arguments device and delay"
@@ -21,59 +18,6 @@ class Device:
     def get_id(self):
         '''Returns device's id'''
         return self._id
-    def alert(self, description: str, time_began: int, no_propagate=False) -> Alert:
-        '''Creates a new alert given name and time begun'''
-        assert description and type(time_began) == int, "Missing arguments"
-        # Make Alerts (Or Blank alert due to cancellation) conflict and do nothing
-        existing_alert = None
-        for alert in self._alerts:
-            if alert.get_description() == description:
-                alert.change_time(time_began)
-                existing_alert = alert
-        if not existing_alert:
-            existing_alert = Alert(description, time_began)
-            self._alerts.append(existing_alert)
-            if not no_propagate:
-                self.propagate(existing_alert, time_began)
-
-        return existing_alert
-    def cancel_alert(self, description: str, time_cancelled: int):
-        '''
-        Cancels alert of the description.
-        time_cancelled is the time the device is supposed to receive the cancellation
-        '''
-        assert description and type(time_cancelled) == int, "Missing arguments"
-        for i in range(len(self._alerts)):
-            alert = self._alerts[i]
-            if alert.get_description() != description: continue
-            if alert.is_propagation_ceased():
-                return
-            alert.cancel(time_cancelled)
-            self.propagate(alert, time_cancelled)
-    def propagate(self, alert: Alert, time_began: int):
-        '''Propagates'''
-
-        if alert.is_propagation_ceased(): return
-
-        alert_desc = alert.get_description()
-        if alert.is_cancelled():
-            alert.set_propagation_ceased()
-
-        for prop_rule in self._prop_rules:
-            receiver = prop_rule[0]
-            delay = prop_rule[1]
-            time_received = time_began + delay
-
-            if alert.is_cancelled():
-                if self._logger:
-                    self._logger.log_sent(time_began, "CANCELLATION", self.get_id(), receiver.get_id(), alert_desc)
-                    self._logger.log_received(time_received, "CANCELLATION", receiver.get_id(), self.get_id(), alert_desc)
-                receiver.cancel_alert(alert_desc, time_received)
-            else:
-                if self._logger:
-                    self._logger.log_sent(time_began, "ALERT", self.get_id(), receiver.get_id(), alert_desc)
-                    self._logger.log_received(time_received, "ALERT", receiver.get_id(), self.get_id(), alert_desc)                   
-                receiver.alert(alert_desc, time_received)
 class Alert:
     '''
     Alert class.
@@ -90,7 +34,6 @@ class Alert:
         self._description = description
         self._time = time
         self._cancelled = False
-        self._propagation_ceased = False
     def get_description(self) -> str:
         '''Returns the alert's description'''
         return self._description
@@ -110,24 +53,21 @@ class Alert:
         return self._cancelled
     def change_time(self, time: int):
         self._time = time
-    def set_propagation_ceased(self):
-        self._propagation_ceased = True
-    def is_propagation_ceased(self):
-        return self._propagation_ceased
-
 class Simulation:
     def __init__(self):
         self._logger = None
         self._devices = {}
         self._initial_alerts_queue = []
-        self._initial_cancellations_queue = []
+        self._cancellations_queue = {}
+        self._length = None
     def set_length(self, length):
         '''Initializes logger'''
+        self._length = length
         self._logger = logger.Logger(length)
     def add_device(self, device_id: str):
         '''Add devices to simulation list'''
         assert self._logger
-        self._devices[device_id] = Device(self._logger)
+        self._devices[device_id] = Device()
     def add_propagation(self, propagator_id: str, propagatee_id: str, delay: str):
         '''Add propagation rule'''
         self._devices[propagator_id].add_prop_rule(self._devices[propagatee_id], int(delay))
@@ -136,12 +76,97 @@ class Simulation:
         self._initial_alerts_queue.append((device_id, message, time_begin))
     def add_cancellation_time(self, device_id: str, message: str, time_begin: str):
         '''Add cancellation times'''
-        self._initial_cancellations_queue.append((device_id, message, time_begin))
+        if not device_id in self._cancellations_queue:
+            self._cancellations_queue[device_id] = {}
+        self._cancellations_queue[device_id][message] = int(time_begin)
+    def _propagate(self):
+        '''Propagation logic'''
+        assert self._logger
+
+        length = self._length
+
+        # Build initial event queue:
+        # event = (time, kind, src_device_obj, dst_device_obj, description, seeded)
+        # seeded=True means "raised by device itself" (no RECEIVED line, only SENTs)
+        events = []
+
+        # Seed ALERT raises
+        for (dev_id, desc, t) in self._initial_alerts_queue:
+            t = int(t)
+            dev = self._devices[dev_id]
+            events.append((t, "ALERT", dev, dev, desc, True))
+
+        # Seed CANCELLATION raises
+        for dev_id, mapping in self._cancellations_queue.items():
+            dev = self._devices[dev_id]
+            for desc, t in mapping.items():
+                events.append((int(t), "CANCELLATION", dev, dev, desc, True))
+
+        # Process events in time order; batch by same time to support the "n+1" rule
+        while events:
+            # pick next time
+            events.sort(key=lambda e: e[0])
+            current_time = events[0][0]
+
+            # Stop at end time: nothing happens at time == LENGTH
+            if length is not None and current_time >= int(length):
+                break
+
+            # Take batch with same timestamp
+            batch = []
+            while events and events[0][0] == current_time:
+                batch.append(events.pop(0))
+
+            # Snapshot cancels before this time (n+1 rule)
+            canceled_before = {d.get_id(): set(d._seen_cancels) for d in self._devices.values()}
+            cancels_to_apply = []  # (dst_device_obj, desc)
+
+            for (t, kind, src, dst, desc, seeded) in batch:
+                # Log RECEIVED for real network deliveries (not for initial raises)
+                if not seeded and src.get_id() != dst.get_id():
+                    self._logger.log_received(t, kind, dst.get_id(), src.get_id(), desc)
+
+                if kind == "ALERT":
+                    # If canceled before this time, do not forward
+                    if desc in canceled_before[dst.get_id()]:
+                        continue
+
+                    # If canceled before this time, do not forward
+                    if desc in canceled_before[dst.get_id()]:
+                        continue
+
+                    # Immediately send to propagation set (EVERY time we receive it)
+                    for (neighbor, delay) in dst._prop_rules:
+                        recv_time = t + delay
+                        if length is not None and recv_time >= int(length):
+                            continue
+
+                        self._logger.log_sent(t, "ALERT", dst.get_id(), neighbor.get_id(), desc)
+                        events.append((recv_time, "ALERT", dst, neighbor, desc, False))
+                else:  # CANCELLATION
+                    # Forward cancellation at most once per device
+                    if desc in dst._seen_cancels:
+                        # already known cancel; no forward
+                        continue
+
+                    # n+1 rule: cancellation becomes effective AFTER all events at time t are processed
+                    cancels_to_apply.append((dst, desc))
+
+                    # Immediately send cancellation to propagation set
+                    for (neighbor, delay) in dst._prop_rules:
+                        recv_time = t + delay
+                        if length is not None and recv_time >= int(length):
+                            continue
+
+                        self._logger.log_sent(t, "CANCELLATION", dst.get_id(), neighbor.get_id(), desc)
+                        events.append((recv_time, "CANCELLATION", dst, neighbor, desc, False))
+
+            # Apply cancellations after the batch (so they affect time t+1 onward)
+            for (dst, desc) in cancels_to_apply:
+                dst._seen_cancels.add(desc)
+
     def run(self):
         '''Runs the simulation'''
-        assert self._devices and self._logger and self._initial_alerts_queue
-        for alert in self._initial_alerts_queue:
-            self._devices[alert[0]].alert(alert[1], int(alert[2]))
-        for alert in self._initial_cancellations_queue:
-            self._devices[alert[0]].cancel_alert(alert[1], int(alert[2]))
+        assert self._devices and self._logger
+        self._propagate()
         print(self._logger.organize_log())
